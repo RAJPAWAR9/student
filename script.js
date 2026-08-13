@@ -1,7 +1,7 @@
 /**
  * BOOSTER V1.0 - Next-Gen Audio OS Engine & Beat Reactive Suite
  * Designed by Raj Pawar
- * Integrated with LRCLIB API Engine for exact time-synchronized lyrics.
+ * Integrated with LRCLIB API Engine & Dynamic Music Cover Art/Poster APIs.
  */
 
 const SECURITY_PASSWORD = "raj123";
@@ -88,8 +88,11 @@ const playlist = {
   ]
 };
 
-// Caches for LRCLIB lyrics fetched per song file
+// Caches for LRCLIB lyrics & Posters fetched per song file
 const lyricsMemoryCache = new Map();
+const posterMemoryCache = new Map();
+
+const DEFAULT_POSTER = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=600&q=80";
 
 // ===== Icons =====
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
@@ -636,6 +639,70 @@ function getNextSong() {
   return list[currentSongIndex];
 }
 
+// ===== SONG POSTER / COVER ART API ENGINE =====
+async function fetchAndRenderPoster(song) {
+  if (!song) return;
+
+  const miniArt = document.getElementById('mini-art');
+  const mainArt = document.getElementById('main-art-display');
+
+  if (posterMemoryCache.has(song.file)) {
+    const cachedUrl = posterMemoryCache.get(song.file);
+    applyPosterImage(cachedUrl);
+    return;
+  }
+
+  const title = song.title || song.file;
+  const artist = song.artist ? song.artist.split(',')[0].trim() : '';
+
+  try {
+    // 1. iTunes Search API (Highest Quality Album Covers)
+    const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(title + " " + artist)}&entity=song&limit=1`;
+    const response = await fetch(itunesUrl);
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.results && data.results.length > 0 && data.results[0].artworkUrl100) {
+        // Upgrade image quality from 100x100 to 600x600
+        const highResUrl = data.results[0].artworkUrl100.replace('100x100bb', '600x600bb');
+        posterMemoryCache.set(song.file, highResUrl);
+        applyPosterImage(highResUrl);
+        return;
+      }
+    }
+
+    // 2. Deezer API Fallback
+    const deezerUrl = `https://api.deezer.com/search?q=${encodeURIComponent(title)}&limit=1`;
+    const deezerRes = await fetch(deezerUrl);
+    if (deezerRes.ok) {
+      const dData = await deezerRes.json();
+      if (dData.data && dData.data.length > 0 && dData.data[0].album && dData.data[0].album.cover_big) {
+        const coverUrl = dData.data[0].album.cover_big;
+        posterMemoryCache.set(song.file, coverUrl);
+        applyPosterImage(coverUrl);
+        return;
+      }
+    }
+
+    // Fallback if APIs don't find a match
+    posterMemoryCache.set(song.file, DEFAULT_POSTER);
+    applyPosterImage(DEFAULT_POSTER);
+
+  } catch (err) {
+    console.warn("Poster API Fetch error, using default fallback:", err);
+    posterMemoryCache.set(song.file, DEFAULT_POSTER);
+    applyPosterImage(DEFAULT_POSTER);
+  }
+}
+
+function applyPosterImage(imageUrl) {
+  const miniArt = document.getElementById('mini-art');
+  const mainArt = document.getElementById('main-art-display');
+
+  if (miniArt) miniArt.style.backgroundImage = `url('${imageUrl}')`;
+  if (mainArt) mainArt.style.backgroundImage = `url('${imageUrl}')`;
+}
+
 function loadAndPlaySong(songToPlay = null, isManualTrigger = true) {
   ensureAudioEngine();
 
@@ -666,8 +733,9 @@ function loadAndPlaySong(songToPlay = null, isManualTrigger = true) {
   syncFavoriteButtons();
   preloadedForCurrent = false;
 
-  // Fetch LRCLIB real synced lyrics
+  // Fetch LRCLIB real synced lyrics & Song Cover Art Poster
   fetchAndRenderLrclibLyrics(song);
+  fetchAndRenderPoster(song);
 
   if (isManualTrigger) {
     crossfadeStarted = false;
@@ -807,6 +875,7 @@ function startCrossfade(nextSong) {
       updateQueueAndHistoryUI();
       syncActiveCardHighlight();
       fetchAndRenderLrclibLyrics(nextSong);
+      fetchAndRenderPoster(nextSong);
     }
   }, fadeStepMs);
 }
@@ -873,7 +942,6 @@ async function fetchAndRenderLrclibLyrics(song) {
   const primaryArtist = song.artist ? song.artist.split(',')[0].trim() : '';
 
   try {
-    // Attempt direct match first
     let getUrl = `https://lrclib.net/api/get?track_name=${encodeURIComponent(trackTitle)}`;
     if (primaryArtist) getUrl += `&artist_name=${encodeURIComponent(primaryArtist)}`;
 
@@ -883,7 +951,6 @@ async function fetchAndRenderLrclibLyrics(song) {
     if (response.ok) {
       data = await response.json();
     } else {
-      // Search endpoint fallback
       const searchUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(trackTitle + ' ' + primaryArtist)}`;
       const searchRes = await fetch(searchUrl);
       if (searchRes.ok) {
@@ -1051,10 +1118,14 @@ function syncActiveCardHighlight() {
 function setupMediaSession(song) {
   if (!('mediaSession' in navigator)) return;
   try {
+    const posterUrl = posterMemoryCache.get(song.file) || DEFAULT_POSTER;
     navigator.mediaSession.metadata = new MediaMetadata({
       title: song.title || 'Unknown Track',
       artist: song.artist || 'BOOSTER Audio',
-      album: 'BOOSTER V1.0'
+      album: 'BOOSTER V1.0',
+      artwork: [
+        { src: posterUrl, sizes: '512x512', type: 'image/png' }
+      ]
     });
     navigator.mediaSession.setActionHandler('play', () => togglePlay(true));
     navigator.mediaSession.setActionHandler('pause', () => togglePlay(false));
