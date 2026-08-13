@@ -1,14 +1,57 @@
 /**
  * BOOSTER V1.0 - Next-Gen Audio OS Engine & Beat Reactive Suite
  * Designed by Raj Pawar
- * Integrated with LRCLIB API Engine & Dynamic Music Cover Art/Poster APIs.
+ * Integrated with JioSaavn API & LRCLIB API Engine
  */
 
+const API_BASE_URL = "https://jiosaavn-api.raj-pawar091206.workers.dev";
 const SECURITY_PASSWORD = "raj123";
 const BASE_FOLDER_2026 = "song/2026 music";
 const BASE_FOLDER_90S = "song/2026 music/90s";
 
 const QUALITY_CHAIN = ["flac", "wav", "m4a", "mp3"];
+
+// ===== JioSaavn API Engine Integration =====
+async function searchSaavnSongs(query) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/search/songs?query=${encodeURIComponent(query)}`);
+    const result = await response.json();
+
+    if (result.success && result.data?.results) {
+      return result.data.results.map((song) => {
+        // High quality download stream URL extraction
+        const streamUrl = Array.isArray(song.downloadUrl) && song.downloadUrl.length > 0
+          ? song.downloadUrl[song.downloadUrl.length - 1].link
+          : "";
+
+        return {
+          id: song.id,
+          title: song.name,
+          artist: song.primaryArtists || song.artists?.primary?.[0]?.name || "Unknown Artist",
+          streamUrl: streamUrl,
+          file: song.id, // unique identifier key
+          isOnline: true
+        };
+      });
+    }
+  } catch (error) {
+    console.error("JioSaavn API Search Error:", error);
+  }
+  return [];
+}
+
+async function getSaavnSongById(songId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/songs?id=${songId}`);
+    const result = await response.json();
+    if (result.success && result.data) {
+      return result.data;
+    }
+  } catch (error) {
+    console.error("JioSaavn API Fetch Details Error:", error);
+  }
+  return null;
+}
 
 const playlist = {
   "Trending": [
@@ -88,11 +131,8 @@ const playlist = {
   ]
 };
 
-// Caches for LRCLIB lyrics & Posters fetched per song file
+// Caches for LRCLIB lyrics fetched per song file
 const lyricsMemoryCache = new Map();
-const posterMemoryCache = new Map();
-
-const DEFAULT_POSTER = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=600&q=80";
 
 // ===== Icons =====
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
@@ -295,7 +335,9 @@ function initPasswordLock() {
 
 // ===== URL & List Helpers =====
 function buildUrl(song, extension = "m4a") {
-  if (!song || !song.file) return "";
+  if (!song) return "";
+  if (song.streamUrl) return song.streamUrl; // Return online JioSaavn stream URL if available
+  if (!song.file) return "";
   const is90s = playlist["90s"].some(s => s.file === song.file);
   const basePath = is90s ? BASE_FOLDER_90S : BASE_FOLDER_2026;
   return `${basePath}/${song.file}.${extension}`.split('/').map(part => encodeURIComponent(part)).join('/');
@@ -540,6 +582,21 @@ function renderBeatSyncVisualizer() {
 // ===== Playback core =====
 function playAudioWithFallback(audioElement, song, chainIndex = 0) {
   if (!song) return;
+
+  if (song.isOnline && song.streamUrl) {
+    audioElement.src = song.streamUrl;
+    audioElement.playbackRate = playbackSpeed;
+    const playPromise = audioElement.play();
+    if (playPromise !== undefined) {
+      playPromise.then(() => updatePlaybackUI(true)).catch((err) => {
+        console.error("Online Stream Error:", err);
+        updatePlaybackUI(false);
+        showToast("Unable to stream online track");
+      });
+    }
+    return;
+  }
+
   const chain = getFormatChainForSong(song);
   if (chainIndex >= chain.length) {
     updatePlaybackUI(false);
@@ -639,70 +696,6 @@ function getNextSong() {
   return list[currentSongIndex];
 }
 
-// ===== SONG POSTER / COVER ART API ENGINE =====
-async function fetchAndRenderPoster(song) {
-  if (!song) return;
-
-  const miniArt = document.getElementById('mini-art');
-  const mainArt = document.getElementById('main-art-display');
-
-  if (posterMemoryCache.has(song.file)) {
-    const cachedUrl = posterMemoryCache.get(song.file);
-    applyPosterImage(cachedUrl);
-    return;
-  }
-
-  const title = song.title || song.file;
-  const artist = song.artist ? song.artist.split(',')[0].trim() : '';
-
-  try {
-    // 1. iTunes Search API (Highest Quality Album Covers)
-    const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(title + " " + artist)}&entity=song&limit=1`;
-    const response = await fetch(itunesUrl);
-    
-    if (response.ok) {
-      const data = await response.json();
-      if (data.results && data.results.length > 0 && data.results[0].artworkUrl100) {
-        // Upgrade image quality from 100x100 to 600x600
-        const highResUrl = data.results[0].artworkUrl100.replace('100x100bb', '600x600bb');
-        posterMemoryCache.set(song.file, highResUrl);
-        applyPosterImage(highResUrl);
-        return;
-      }
-    }
-
-    // 2. Deezer API Fallback
-    const deezerUrl = `https://api.deezer.com/search?q=${encodeURIComponent(title)}&limit=1`;
-    const deezerRes = await fetch(deezerUrl);
-    if (deezerRes.ok) {
-      const dData = await deezerRes.json();
-      if (dData.data && dData.data.length > 0 && dData.data[0].album && dData.data[0].album.cover_big) {
-        const coverUrl = dData.data[0].album.cover_big;
-        posterMemoryCache.set(song.file, coverUrl);
-        applyPosterImage(coverUrl);
-        return;
-      }
-    }
-
-    // Fallback if APIs don't find a match
-    posterMemoryCache.set(song.file, DEFAULT_POSTER);
-    applyPosterImage(DEFAULT_POSTER);
-
-  } catch (err) {
-    console.warn("Poster API Fetch error, using default fallback:", err);
-    posterMemoryCache.set(song.file, DEFAULT_POSTER);
-    applyPosterImage(DEFAULT_POSTER);
-  }
-}
-
-function applyPosterImage(imageUrl) {
-  const miniArt = document.getElementById('mini-art');
-  const mainArt = document.getElementById('main-art-display');
-
-  if (miniArt) miniArt.style.backgroundImage = `url('${imageUrl}')`;
-  if (mainArt) mainArt.style.backgroundImage = `url('${imageUrl}')`;
-}
-
 function loadAndPlaySong(songToPlay = null, isManualTrigger = true) {
   ensureAudioEngine();
 
@@ -733,9 +726,8 @@ function loadAndPlaySong(songToPlay = null, isManualTrigger = true) {
   syncFavoriteButtons();
   preloadedForCurrent = false;
 
-  // Fetch LRCLIB real synced lyrics & Song Cover Art Poster
+  // Fetch LRCLIB real synced lyrics
   fetchAndRenderLrclibLyrics(song);
-  fetchAndRenderPoster(song);
 
   if (isManualTrigger) {
     crossfadeStarted = false;
@@ -875,7 +867,6 @@ function startCrossfade(nextSong) {
       updateQueueAndHistoryUI();
       syncActiveCardHighlight();
       fetchAndRenderLrclibLyrics(nextSong);
-      fetchAndRenderPoster(nextSong);
     }
   }, fadeStepMs);
 }
@@ -1058,7 +1049,7 @@ function renderTrendingGrid() {
     card.style.animationDelay = `${Math.min(index, 20) * 25}ms`;
     card.innerHTML = `
       <div class="track-info">
-        <div class="track-title">${index + 1}. ${escapeHtml(displayTitle)}</div>
+        <div class="track-title">${index + 1}. ${escapeHtml(displayTitle)} ${song.isOnline ? '<span style="font-size:10px; color:#00f2fe; border:1px solid #00f2fe; border-radius:3px; padding:1px 4px; margin-left:6px;">ONLINE</span>' : ''}</div>
         <div class="track-artist">${escapeHtml(displayArtist)}</div>
       </div>
       <div class="track-actions">
@@ -1118,14 +1109,10 @@ function syncActiveCardHighlight() {
 function setupMediaSession(song) {
   if (!('mediaSession' in navigator)) return;
   try {
-    const posterUrl = posterMemoryCache.get(song.file) || DEFAULT_POSTER;
     navigator.mediaSession.metadata = new MediaMetadata({
       title: song.title || 'Unknown Track',
       artist: song.artist || 'BOOSTER Audio',
-      album: 'BOOSTER V1.0',
-      artwork: [
-        { src: posterUrl, sizes: '512x512', type: 'image/png' }
-      ]
+      album: 'BOOSTER V1.0'
     });
     navigator.mediaSession.setActionHandler('play', () => togglePlay(true));
     navigator.mediaSession.setActionHandler('pause', () => togglePlay(false));
@@ -1609,18 +1596,32 @@ document.addEventListener('DOMContentLoaded', () => {
   if (progressContainer) progressContainer.onclick = (e) => handleSeek(e, progressContainer);
   if (modalProgressContainer) modalProgressContainer.onclick = (e) => handleSeek(e, modalProgressContainer);
 
+  // Dynamic Global Search with JioSaavn API + Local Filter
   const searchInput = document.getElementById('global-search');
   if (searchInput) {
-    searchInput.oninput = debounce((e) => {
+    searchInput.oninput = debounce(async (e) => {
       const query = e.target.value.toLowerCase().trim();
       const fullList = getActiveList();
-      displayedList = query ? fullList.filter(s =>
-        (s.title && s.title.toLowerCase().includes(query)) ||
-        (s.artist && s.artist.toLowerCase().includes(query))
-      ) : fullList;
+
+      if (!query) {
+        displayedList = fullList;
+      } else {
+        // Filter local files first
+        const localMatches = fullList.filter(s =>
+          (s.title && s.title.toLowerCase().includes(query)) ||
+          (s.artist && s.artist.toLowerCase().includes(query))
+        );
+
+        // Fetch JioSaavn online results
+        const onlineMatches = await searchSaavnSongs(query);
+
+        // Merge local + JioSaavn results
+        displayedList = [...localMatches, ...onlineMatches];
+      }
+
       currentSongIndex = 0;
       renderTrendingGrid();
-    }, 180);
+    }, 300);
   }
 
   const volSlider = document.getElementById('master-volume');
