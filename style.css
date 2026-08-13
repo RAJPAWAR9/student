@@ -42,19 +42,6 @@ button { user-select: none; }
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 @keyframes fadeOutToast { to { opacity: 0; transform: translateY(-6px); } }
 
-/* Lock screen */
-.lock-overlay { position: fixed; inset: 0; background: rgba(3,4,7,0.96); backdrop-filter: blur(25px); z-index: 9999; display: flex; align-items: center; justify-content: center; transition: opacity 0.3s ease; padding: 20px; }
-.lock-card { padding: clamp(24px, 5vw, 36px); border-radius: 24px; text-align: center; width: 100%; max-width: 340px; }
-.lock-input-group { display: flex; flex-direction: column; gap: 12px; }
-.pass-field-wrap { display: flex; align-items: center; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden; }
-.pass-field-wrap input { flex: 1; padding: 12px 16px; border: none; background: none; color: #fff; outline: none; text-align: center; font-size: 14px; }
-.pass-field-wrap button { background: none; border: none; color: var(--text-secondary); padding: 0 14px; cursor: pointer; font-size: 15px; min-width: 44px; min-height: 44px; }
-.remember-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); justify-content: center; cursor: pointer; }
-.lock-input-group button#unlock-btn { padding: 14px; border-radius: 12px; border: none; background: var(--primary-glow); color: #000; font-weight: 800; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; min-height: 46px; }
-.lock-input-group button#unlock-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(0,242,254,0.35); }
-.lock-card.shake { animation: shakeErr 0.4s ease; }
-@keyframes shakeErr { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-8px);} 75%{transform:translateX(8px);} }
-
 /* Canvas & Ambient Glow */
 #visualizer-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none; transform: translateZ(0); }
 .ambient-glow { position: fixed; top: 50%; left: 50%; width: 700px; height: 700px; transform: translate(-50%, -50%); background: radial-gradient(circle, rgba(0,242,254,0.15) 0%, rgba(121,40,202,0.1) 40%, rgba(0,0,0,0) 70%); z-index: 0; filter: blur(80px); transition: transform 0.08s ease-out, background 0.8s ease; pointer-events: none; will-change: transform; }
