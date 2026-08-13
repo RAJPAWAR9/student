@@ -951,14 +951,16 @@ async function fetchAndRenderLrclibLyrics(song) {
     renderParsedLyrics(cached);
     return;
   }
+// HTML entities (&amp; etc.) ko clean karne ke liye:
+const rawTitle = song.title || song.file || '';
+const trackTitle = rawTitle
+  .replace(/&amp;/g, '&')
+  .replace(/&quot;/g, '"')
+  .replace(/&#039;/g, "'");
 
-  const trackTitle = song.title || song.file;
-  const primaryArtist = song.artist ? song.artist.split(',')[0].trim() : '';
-
-  try {
-    let getUrl = `https://lrclib.net/api/get?track_name=${encodeURIComponent(trackTitle)}`;
-    if (primaryArtist) getUrl += `&artist_name=${encodeURIComponent(primaryArtist)}`;
-
+const primaryArtist = (song.artist ? song.artist.split(',')[0].trim() : '')
+  .replace(/&amp;/g, '&');
+ 
     let response = await fetch(getUrl);
     let data = null;
 
