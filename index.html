@@ -8,15 +8,15 @@
   <style>
     :root {
       --bg-base: #030408;
-      --glass-panel: rgba(18, 24, 38, 0.65);
-      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-panel: rgba(18, 24, 38, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.1);
       --accent-cyan: #00f2fe;
       --accent-blue: #4facfe;
       --accent-purple: #7928ca;
-      --accent-glow: rgba(0, 242, 254, 0.25);
+      --accent-glow: rgba(0, 242, 254, 0.3);
       --text-main: #ffffff;
       --text-sub: #8e98b0;
-      --card-hover: rgba(255, 255, 255, 0.05);
+      --card-hover: rgba(255, 255, 255, 0.06);
       --nav-width: 260px;
       --player-height: 90px;
     }
@@ -43,13 +43,20 @@
     .ambient-bg {
       position: fixed;
       inset: 0;
-      background: radial-gradient(circle at 50% 20%, rgba(0, 242, 254, 0.12) 0%, rgba(121, 40, 202, 0.08) 45%, rgba(3, 4, 8, 1) 80%);
+      background: radial-gradient(circle at 50% 20%, rgba(0, 242, 254, 0.15) 0%, rgba(121, 40, 202, 0.1) 45%, rgba(3, 4, 8, 1) 85%);
       z-index: 0;
       pointer-events: none;
       transition: background 1s ease;
     }
 
-    /* Layout Structure */
+    /* Glassmorphism Classes */
+    .glass {
+      background: var(--glass-panel);
+      backdrop-filter: blur(30px);
+      -webkit-backdrop-filter: blur(30px);
+      border: 1px solid var(--glass-border);
+    }
+
     .app-viewport {
       display: flex;
       flex: 1;
@@ -59,15 +66,7 @@
       overflow: hidden;
     }
 
-    /* Glassmorphism Classes */
-    .glass {
-      background: var(--glass-panel);
-      backdrop-filter: blur(25px);
-      -webkit-backdrop-filter: blur(25px);
-      border: 1px solid var(--glass-border);
-    }
-
-    /* Desktop/Laptop Sidebar */
+    /* Desktop Sidebar */
     .sidebar {
       width: var(--nav-width);
       display: flex;
@@ -75,7 +74,6 @@
       justify-content: space-between;
       padding: 24px 18px;
       border-right: 1px solid var(--glass-border);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .brand-logo {
@@ -156,14 +154,12 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      flex-wrap: wrap;
     }
 
     .search-box {
       position: relative;
       flex: 1;
       max-width: 450px;
-      min-width: 260px;
     }
 
     .search-box input {
@@ -212,9 +208,9 @@
     .spotlight {
       background: linear-gradient(135deg, rgba(0, 242, 254, 0.8) 0%, rgba(121, 40, 202, 0.8) 100%);
       border-radius: 20px;
-      padding: 36px;
+      padding: 32px;
       position: relative;
-      box-shadow: 0 10px 30px rgba(0, 242, 254, 0.2);
+      box-shadow: 0 10px 30px rgba(0, 242, 254, 0.25);
     }
 
     .spotlight-badge {
@@ -316,32 +312,40 @@
       text-overflow: ellipsis;
     }
 
-    /* Fullscreen Lyrics Overlay */
-    .lyrics-panel {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+    /* Synced Lyrics Display Engine */
+    .lyrics-container {
+      max-width: 750px;
+      margin: 0 auto;
+      height: 60vh;
+      overflow-y: auto;
+      padding: 40px 20px;
       text-align: center;
-      min-height: 400px;
-      gap: 16px;
+      scroll-behavior: smooth;
     }
 
-    .lyrics-line {
+    .lyrics-container::-webkit-scrollbar {
+      display: none;
+    }
+
+    .lyric-line {
       font-size: 1.3rem;
       color: var(--text-sub);
-      transition: all 0.3s ease;
+      margin: 20px 0;
+      transition: all 0.4s ease;
+      opacity: 0.5;
       cursor: pointer;
     }
 
-    .lyrics-line.active {
-      font-size: 1.8rem;
+    .lyric-line.active {
+      font-size: 2rem;
       font-weight: 800;
       color: var(--accent-cyan);
-      text-shadow: 0 0 20px var(--accent-glow);
+      opacity: 1;
+      text-shadow: 0 0 25px var(--accent-glow);
+      transform: scale(1.05);
     }
 
-    /* Bottom Master Player Bar */
+    /* Bottom Player Bar */
     .player-bar {
       position: fixed;
       bottom: 0;
@@ -362,6 +366,7 @@
       gap: 14px;
       width: 25%;
       min-width: 180px;
+      cursor: pointer;
     }
 
     .album-art {
@@ -451,7 +456,59 @@
       width: 25%;
     }
 
-    /* Mobile Bottom Navigation Bar */
+    /* TOP-END POP-UP MODALS SYSTEM */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 4, 8, 0.85);
+      backdrop-filter: blur(25px);
+      -webkit-backdrop-filter: blur(25px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      background: rgba(18, 24, 38, 0.85);
+      border: 1px solid var(--glass-border);
+      width: 90%;
+      max-width: 650px;
+      border-radius: 24px;
+      padding: 32px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px var(--accent-glow);
+      transform: scale(0.9) translateY(20px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+
+    .modal-overlay.active .modal-card {
+      transform: scale(1) translateY(0);
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: #fff;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 1.1rem;
+    }
+
+    /* Mobile Navigation */
     .mobile-nav {
       display: none;
       position: fixed;
@@ -465,65 +522,21 @@
       border-top: 1px solid var(--glass-border);
     }
 
-    /* RESPONSIVE DESIGN RULES */
-    
-    /* Mobile Devices (<768px) */
+    /* Responsive Rules */
     @media (max-width: 767px) {
-      :root {
-        --player-height: 70px;
-      }
-
+      :root { var(--player-height): 70px; }
       .sidebar { display: none; }
       .mobile-nav { display: flex; }
-
-      .app-viewport {
-        height: calc(100vh - var(--player-height) - 60px);
-      }
-
-      .main-content {
-        padding: 16px;
-      }
-
-      .player-bar {
-        bottom: 60px;
-        padding: 0 12px;
-      }
-
+      .app-viewport { height: calc(100vh - 130px); }
+      .player-bar { bottom: 60px; padding: 0 12px; }
       .player-right { display: none; }
       .player-left { width: 70%; }
       .player-mid { width: 30%; }
       .progress-area { display: none; }
-      .controls { gap: 10px; }
-
-      .song-grid {
-        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-        gap: 12px;
-      }
+      .song-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
     }
 
-    /* Tablets (768px to 1024px) */
-    @media (min-width: 768px) and (max-width: 1024px) {
-      :root {
-        --nav-width: 80px;
-      }
-      .brand-logo span, .nav-btn span, .sidebar-footer { display: none; }
-      .nav-btn { justify-content: center; }
-    }
-
-    /* Dedicated Smart TV Mode (Large Screens & Focus Indicator) */
-    body.tv-mode {
-      font-size: 125%;
-    }
-
-    body.tv-mode .card, 
-    body.tv-mode .nav-btn, 
-    body.tv-mode .icon-btn {
-      outline: 4px solid transparent;
-    }
-
-    body.tv-mode .card:focus, 
-    body.tv-mode .nav-btn:focus, 
-    body.tv-mode .icon-btn:focus {
+    body.tv-mode .card:focus, body.tv-mode .nav-btn:focus, body.tv-mode .icon-btn:focus {
       outline: 4px solid var(--accent-cyan) !important;
       transform: scale(1.08);
     }
@@ -534,7 +547,7 @@
   <div class="ambient-bg" id="ambientBg"></div>
 
   <div class="app-viewport">
-    <!-- Desktop/Tablet Sidebar -->
+    <!-- Desktop Sidebar -->
     <aside class="sidebar glass">
       <div>
         <div class="brand-logo">
@@ -544,25 +557,25 @@
           <button class="nav-btn active" onclick="switchTab('home-view', this)">
             🏠 <span>Home</span>
           </button>
-          <button class="nav-btn" onclick="switchTab('now-playing-view', this)">
-            🎧 <span>Now Playing</span>
+          <button class="nav-btn" onclick="openPlayerModal()">
+            🎧 <span>Now Playing Modal</span>
           </button>
           <button class="nav-btn" onclick="switchTab('lyrics-view', this)">
-            🎤 <span>Live Lyrics</span>
+            🎤 <span>Live Synced Lyrics</span>
           </button>
-          <button class="nav-btn" onclick="toggleTVMode()">
-            📺 <span>TV Mode</span>
+          <button class="nav-btn" onclick="openQueueModal()">
+            📑 <span>Up Next Queue</span>
           </button>
         </nav>
       </div>
 
       <div class="sidebar-footer">
-        <div>Engine: 96kHz/24-bit Direct</div>
-        <div style="color: #00ff88; margin-top: 4px;">● Ultra-Lossless</div>
+        <div>Audio Engine: 96kHz/24-bit</div>
+        <div style="color: #00ff88; margin-top: 4px;">● Synced Lyrics API Loaded</div>
       </div>
     </aside>
 
-    <!-- Main Content Area -->
+    <!-- Main Viewport -->
     <main class="main-content">
       <div class="header-bar">
         <div class="search-box">
@@ -574,47 +587,39 @@
       <section id="home-view" class="view-panel active">
         <div class="spotlight">
           <span class="spotlight-badge">SPOTLIGHT</span>
-          <h2 class="spotlight-title" id="spotlightTitle">Maya Machindra</h2>
-          <p class="spotlight-sub" id="spotlightSub">SP Balasubrahmanyam • High Quality Stream</p>
-          <button class="btn-action" onclick="resumePlayback()">▶ Play Spotlight</button>
+          <h2 class="spotlight-title" id="spotlightTitle">Arijit Singh Essentials</h2>
+          <p class="spotlight-sub">Ultra HD Lossless Stream & Dynamic Lyrics Support</p>
+          <button class="btn-action" onclick="fetchSongs('Arijit Singh')">▶ Stream Hits</button>
         </div>
 
-        <h3 class="section-title">Explore Tracks</h3>
-        <div class="song-grid" id="songGrid">
-          <!-- Live API items populated dynamically -->
-        </div>
-      </section>
-
-      <!-- NOW PLAYING VIEW -->
-      <section id="now-playing-view" class="view-panel">
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 0;">
-          <img id="npArt" src="https://via.placeholder.com/300" style="width: 280px; height: 280px; border-radius: 20px; box-shadow: 0 10px 40px var(--accent-glow); margin-bottom: 24px;" alt="Art">
-          <h2 id="npTitle" style="font-size: 1.8rem;">Track Title</h2>
-          <p id="npArtist" style="color: var(--text-sub); margin-top: 6px;">Artist Name</p>
-        </div>
+        <h3 class="section-title">Trending Audio Library</h3>
+        <div class="song-grid" id="songGrid"></div>
       </section>
 
       <!-- LYRICS VIEW -->
       <section id="lyrics-view" class="view-panel">
-        <div class="lyrics-panel">
-          <div class="lyrics-line">Synced Live Lyrics Engine</div>
-          <div class="lyrics-line active" id="activeLyric">Select a song to display real-time synchronized lyrics</div>
-          <div class="lyrics-line">Powered by LRCLIB API</div>
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 id="lyricHeaderTitle" style="font-size: 1.5rem;">Select a track</h2>
+          <p id="lyricHeaderArtist" style="color: var(--text-sub);">Real-time Synced Lyrics Engine</p>
+        </div>
+        <div class="lyrics-container" id="lyricsBox">
+          <div class="lyric-line active">Play any track to auto-load synced lyrics</div>
         </div>
       </section>
     </main>
   </div>
 
-  <!-- Mobile Bottom Navigation -->
+  <!-- Mobile Bottom Nav -->
   <nav class="mobile-nav glass">
     <button class="icon-btn" onclick="switchTab('home-view', this)">🏠</button>
-    <button class="icon-btn" onclick="switchTab('now-playing-view', this)">🎧</button>
+    <button class="icon-btn" onclick="openPlayerModal()">🎧</button>
     <button class="icon-btn" onclick="switchTab('lyrics-view', this)">🎤</button>
+    <button class="icon-btn" onclick="openQueueModal()">📑</button>
   </nav>
 
-  <!-- Master Bottom Player Bar -->
+  <!-- Bottom Master Player -->
   <footer class="player-bar glass">
-    <div class="player-left">
+    <div class="player-left" onclick="openPlayerModal()">
       <img class="album-art" id="playerImg" src="https://via.placeholder.com/100" alt="Art">
       <div style="overflow: hidden;">
         <div class="card-title" id="playerTitle">Nusta Paisa</div>
@@ -640,48 +645,86 @@
     </div>
 
     <div class="player-right">
+      <button class="icon-btn" onclick="openQueueModal()">📑</button>
       <span style="font-size: 0.8rem; color: var(--text-sub);">Vol</span>
-      <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.8" style="width: 90px; accent-color: var(--accent-cyan);" oninput="setVolume(this.value)">
+      <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.8" style="width: 80px; accent-color: var(--accent-cyan);" oninput="setVolume(this.value)">
     </div>
   </footer>
+
+  <!-- POP-UP MODAL 1: FULLSCREEN NOW PLAYING & PRO EQUALIZER -->
+  <div class="modal-overlay" id="playerModal">
+    <div class="modal-card">
+      <button class="modal-close" onclick="closeModals()">✕</button>
+      <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+        <img id="modalArt" src="https://via.placeholder.com/300" style="width: 220px; height: 220px; border-radius: 20px; box-shadow: 0 10px 40px var(--accent-glow); margin-bottom: 20px;" alt="Art">
+        <h2 id="modalTitle" style="font-size: 1.6rem;">Track Title</h2>
+        <p id="modalArtist" style="color: var(--text-sub); margin-top: 4px;">Artist Name</p>
+
+        <div style="width: 100%; margin-top: 30px; background: rgba(0,0,0,0.3); padding: 20px; border-radius: 16px; border: 1px solid var(--glass-border);">
+          <h3 style="font-size: 0.9rem; color: var(--accent-cyan); margin-bottom: 12px; text-align: left;">Pro DSP Equalizer</h3>
+          <div style="display: flex; justify-content: space-between; gap: 10px;">
+            <div><label style="font-size: 0.7rem; color: var(--text-sub);">BASS</label><br><input type="range" min="-10" max="10" value="4" style="accent-color: var(--accent-cyan);"></div>
+            <div><label style="font-size: 0.7rem; color: var(--text-sub);">MID</label><br><input type="range" min="-10" max="10" value="0" style="accent-color: var(--accent-cyan);"></div>
+            <div><label style="font-size: 0.7rem; color: var(--text-sub);">TREBLE</label><br><input type="range" min="-10" max="10" value="3" style="accent-color: var(--accent-cyan);"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- POP-UP MODAL 2: NOW PLAYING QUEUE -->
+  <div class="modal-overlay" id="queueModal">
+    <div class="modal-card">
+      <button class="modal-close" onclick="closeModals()">✕</button>
+      <h2 style="font-size: 1.3rem; margin-bottom: 16px;">Up Next Queue</h2>
+      <div id="queueList" style="display: flex; flex-direction: column; gap: 12px; max-height: 350px; overflow-y: auto;">
+        <!-- Dynamically filled -->
+      </div>
+    </div>
+  </div>
 
   <script>
     const API_URL = 'https://jiosaavn-api.raj-pawar091206.workers.dev';
     const audio = new Audio();
     let isPlaying = false;
+    let syncedLyrics = [];
 
     window.onload = () => {
-      fetchSongs('Bollywood Hits');
-      setupKeyboardControls();
+      fetchSongs('Bollywood Latest');
     };
 
-    // Tab Navigation
     function switchTab(viewId, element) {
       document.querySelectorAll('.view-panel').forEach(panel => panel.classList.remove('active'));
       document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-      
       document.getElementById(viewId).classList.add('active');
       if (element) element.classList.add('active');
     }
 
-    // Toggle Dedicated TV Mode
-    function toggleTVMode() {
-      document.body.classList.toggle('tv-mode');
-      alert('TV Mode Toggled: Enlarged Focus Indicators and High Contrast Active.');
+    // Modal Controls
+    function openPlayerModal() {
+      closeModals();
+      document.getElementById('playerModal').classList.add('active');
     }
 
-    // Handle Search
+    function openQueueModal() {
+      closeModals();
+      document.getElementById('queueModal').classList.add('active');
+    }
+
+    function closeModals() {
+      document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+    }
+
     function handleSearch(e) {
       if (e.key === 'Enter') {
-        const query = document.getElementById('searchInput').value.trim();
-        if (query) fetchSongs(query);
+        const q = document.getElementById('searchInput').value.trim();
+        if (q) fetchSongs(q);
       }
     }
 
-    // Fetch Songs from API
     async function fetchSongs(query) {
       const grid = document.getElementById('songGrid');
-      grid.innerHTML = '<div style="color:var(--text-sub)">Loading tracks...</div>';
+      grid.innerHTML = '<div style="color:var(--text-sub)">Loading audio stream...</div>';
 
       try {
         const res = await fetch(`${API_URL}/api/search/songs?query=${encodeURIComponent(query)}`);
@@ -689,15 +732,18 @@
         const songs = data?.data?.results || [];
 
         grid.innerHTML = '';
-        songs.forEach((song) => {
+        const queueContainer = document.getElementById('queueList');
+        queueContainer.innerHTML = '';
+
+        songs.forEach((song, idx) => {
           const title = decodeEntities(song.name);
           const artist = decodeEntities(song.primaryArtists || 'Unknown');
           const img = song.image[2]?.url || song.image[0]?.url;
           const url = song.downloadUrl[song.downloadUrl.length - 1]?.url;
 
+          // Populate Main Grid
           const card = document.createElement('div');
           card.className = 'card';
-          card.tabIndex = 0; // Focusable for TV Remotes / Keyboard
           card.innerHTML = `
             <img src="${img}" alt="${title}">
             <div class="card-title">${title}</div>
@@ -705,32 +751,39 @@
           `;
           card.onclick = () => playSong(title, artist, img, url);
           grid.appendChild(card);
+
+          // Populate Queue Modal
+          const qItem = document.createElement('div');
+          qItem.style.cssText = 'display:flex; align-items:center; gap:12px; padding:10px; background:rgba(255,255,255,0.05); border-radius:10px; cursor:pointer;';
+          qItem.innerHTML = `<img src="${img}" style="width:40px; height:40px; border-radius:6px;"><div><div style="font-size:0.85rem; font-weight:700;">${title}</div><div style="font-size:0.75rem; color:var(--text-sub);">${artist}</div></div>`;
+          qItem.onclick = () => { playSong(title, artist, img, url); closeModals(); };
+          queueContainer.appendChild(qItem);
         });
       } catch (err) {
-        grid.innerHTML = '<div style="color:red">Error fetching songs.</div>';
+        grid.innerHTML = '<div style="color:red">Failed to load audio tracks.</div>';
       }
     }
 
-    // Play Song Logic
     function playSong(title, artist, img, url) {
       document.getElementById('playerTitle').innerText = title;
       document.getElementById('playerArtist').innerText = artist;
       document.getElementById('playerImg').src = img;
 
-      // Sync Now Playing View
-      document.getElementById('npTitle').innerText = title;
-      document.getElementById('npArtist').innerText = artist;
-      document.getElementById('npArt').src = img;
+      document.getElementById('modalTitle').innerText = title;
+      document.getElementById('modalArtist').innerText = artist;
+      document.getElementById('modalArt').src = img;
+
+      document.getElementById('lyricHeaderTitle').innerText = title;
+      document.getElementById('lyricHeaderArtist').innerText = artist;
 
       audio.src = url;
       audio.play();
       isPlaying = true;
       document.getElementById('playBtn').innerText = '⏸';
-      
-      fetchLyrics(title, artist);
+
+      fetchSyncedLyrics(title, artist);
     }
 
-    // Toggle Play/Pause
     function togglePlay() {
       if (!audio.src) return;
       if (isPlaying) {
@@ -743,11 +796,6 @@
       isPlaying = !isPlaying;
     }
 
-    function resumePlayback() {
-      if (audio.src) audio.play();
-    }
-
-    // Seek Audio
     function seekAudio(e) {
       if (!audio.duration) return;
       const bar = document.getElementById('progressBar');
@@ -756,18 +804,73 @@
       audio.currentTime = pos * audio.duration;
     }
 
-    // Sync Audio Time Progress Bar
+    function setVolume(v) { audio.volume = v; }
+
+    // REAL-TIME SYNCED LYRICS ENGINE
+    async function fetchSyncedLyrics(track, artist) {
+      const box = document.getElementById('lyricsBox');
+      box.innerHTML = '<div class="lyric-line active">Searching synced lyrics...</div>';
+      syncedLyrics = [];
+
+      try {
+        const res = await fetch(`https://lrclib.net/api/get?track_name=${encodeURIComponent(track)}&artist_name=${encodeURIComponent(artist)}`);
+        const data = await res.json();
+
+        if (data.syncedLyrics) {
+          box.innerHTML = '';
+          const lines = data.syncedLyrics.split('\n');
+          lines.forEach(line => {
+            const match = line.match(/\[(\d+):(\d+\.\d+)\](.*)/);
+            if (match) {
+              const time = parseInt(match[1]) * 60 + parseFloat(match[2]);
+              const text = match[3].trim();
+              if (text) {
+                syncedLyrics.push({ time, text });
+                const el = document.createElement('div');
+                el.className = 'lyric-line';
+                el.innerText = text;
+                el.onclick = () => { audio.currentTime = time; };
+                box.appendChild(el);
+              }
+            }
+          });
+        } else if (data.plainLyrics) {
+          box.innerHTML = data.plainLyrics.split('\n').map(l => `<div class="lyric-line active">${l}</div>`).join('');
+        } else {
+          box.innerHTML = '<div class="lyric-line active">No synced lyrics found for this song.</div>';
+        }
+      } catch (e) {
+        box.innerHTML = '<div class="lyric-line active">Lyrics unavailable.</div>';
+      }
+    }
+
+    // UPDATE TIME & HIGHLIGHT LYRICS
     audio.ontimeupdate = () => {
       if (!audio.duration) return;
-      const pct = (audio.currentTime / audio.duration) * 100;
+      const cur = audio.currentTime;
+      const pct = (cur / audio.duration) * 100;
       document.getElementById('progressFill').style.width = pct + '%';
-      document.getElementById('currentTime').innerText = formatTime(audio.currentTime);
+      document.getElementById('currentTime').innerText = formatTime(cur);
       document.getElementById('totalTime').innerText = formatTime(audio.duration);
-    };
 
-    function setVolume(val) {
-      audio.volume = val;
-    }
+      // Synced Lyrics Highlight
+      if (syncedLyrics.length > 0) {
+        const lines = document.querySelectorAll('.lyrics-container .lyric-line');
+        for (let i = 0; i < syncedLyrics.length; i++) {
+          if (cur >= syncedLyrics[i].time && (!syncedLyrics[i + 1] || cur < syncedLyrics[i + 1].time)) {
+            lines.forEach((l, idx) => {
+              if (idx === i) {
+                l.classList.add('active');
+                l.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              } else {
+                l.classList.remove('active');
+              }
+            });
+            break;
+          }
+        }
+      }
+    };
 
     function formatTime(sec) {
       const m = Math.floor(sec / 60);
@@ -779,34 +882,6 @@
       const txt = document.createElement('textarea');
       txt.innerHTML = str;
       return txt.value;
-    }
-
-    // Lyrics Fetch via LRCLIB
-    async function fetchLyrics(track, artist) {
-      const activeLyric = document.getElementById('activeLyric');
-      activeLyric.innerText = 'Searching lyrics...';
-      try {
-        const res = await fetch(`https://lrclib.net/api/get?track_name=${encodeURIComponent(track)}&artist_name=${encodeURIComponent(artist)}`);
-        const data = await res.json();
-        if (data.plainLyrics) {
-          activeLyric.innerText = data.plainLyrics.split('\n')[0] || 'Synced Lyrics Ready';
-        } else {
-          activeLyric.innerText = 'Instrumental or Lyrics not available.';
-        }
-      } catch (e) {
-        activeLyric.innerText = 'Lyrics unavailable.';
-      }
-    }
-
-    // Keyboard & Smart TV Navigation Support
-    function setupKeyboardControls() {
-      document.addEventListener('keydown', (e) => {
-        if (e.target.tagName === 'INPUT') return;
-        if (e.code === 'Space') {
-          e.preventDefault();
-          togglePlay();
-        }
-      });
     }
   </script>
 </body>
