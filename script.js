@@ -286,51 +286,7 @@ function detectTVEnvironment() {
   return /smart-?tv|smarttv|tizen|webos|viera|netcast|roku|appletv|googletv|hbbtv|aft[a-z]?|crkey|bravia/i.test(ua);
 }
 
-// ===== Password Lock =====
-function initPasswordLock() {
-  const lockBtn = document.getElementById('unlock-btn');
-  const passInput = document.getElementById('access-pass');
-  const lockError = document.getElementById('lock-error');
-  const lockScreen = document.getElementById('lock-screen');
-  const lockCard = document.querySelector('.lock-card');
-  const rememberCheckbox = document.getElementById('remember-me');
-  const toggleVis = document.getElementById('toggle-pass-visibility');
 
-  if (localStorage.getItem('booster_unlocked') === 'true' && lockScreen) {
-    lockScreen.style.opacity = '0';
-    lockScreen.style.display = 'none';
-  }
-
-  function tryUnlock() {
-    if (passInput.value === SECURITY_PASSWORD) {
-      if (rememberCheckbox && rememberCheckbox.checked) {
-        localStorage.setItem('booster_unlocked', 'true');
-      }
-      lockScreen.style.opacity = '0';
-      setTimeout(() => lockScreen.style.display = 'none', 300);
-    } else {
-      lockError.style.display = 'block';
-      if (lockCard) {
-        lockCard.classList.remove('shake');
-        requestAnimationFrame(() => lockCard.classList.add('shake'));
-      }
-    }
-  }
-
-  if (lockBtn) lockBtn.onclick = tryUnlock;
-  if (passInput) {
-    passInput.focus();
-    passInput.onkeypress = (e) => { if (e.key === 'Enter') tryUnlock(); };
-  }
-  if (toggleVis && passInput) {
-    toggleVis.onclick = () => {
-      const isPass = passInput.type === 'password';
-      passInput.type = isPass ? 'text' : 'password';
-      toggleVis.textContent = isPass ? '🙈' : '👁';
-      toggleVis.setAttribute('aria-label', isPass ? 'Hide password' : 'Show password');
-    };
-  }
-}
 
 // ===== URL & List Helpers =====
 function buildUrl(song, extension = "m4a") {
