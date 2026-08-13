@@ -5,7 +5,6 @@
  */
 
 const API_BASE_URL = "https://jiosaavn-api.raj-pawar091206.workers.dev";
-const SECURITY_PASSWORD = "raj123";
 const BASE_FOLDER_2026 = "song/2026 music";
 const BASE_FOLDER_90S = "song/2026 music/90s";
 
