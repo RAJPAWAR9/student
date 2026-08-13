@@ -583,33 +583,56 @@ function renderBeatSyncVisualizer() {
 function playAudioWithFallback(audioElement, song, chainIndex = 0) {
   if (!song) return;
 
-  if (song.isOnline && song.streamUrl) {
+  // 1. ONLINE SONG PLAYBACK FIX (Online tracks ke liye)
+  if (song.isOnline || (song.streamUrl && song.streamUrl.startsWith('http'))) {
+    if (!song.streamUrl) {
+      showToast("Audio stream URL not found!");
+      updatePlaybackUI(false);
+      return;
+    }
+
+    audioElement.pause();
     audioElement.src = song.streamUrl;
-    audioElement.playbackRate = playbackSpeed;
+    
+    if (typeof playbackSpeed !== 'undefined') {
+      audioElement.playbackRate = playbackSpeed;
+    }
+    
+    audioElement.load();
+
     const playPromise = audioElement.play();
     if (playPromise !== undefined) {
-      playPromise.then(() => updatePlaybackUI(true)).catch((err) => {
-        console.error("Online Stream Error:", err);
-        updatePlaybackUI(false);
-        showToast("Unable to stream online track");
-      });
+      playPromise
+        .then(() => updatePlaybackUI(true))
+        .catch((err) => {
+          console.error("Playback error:", err);
+          updatePlaybackUI(false);
+          showToast("Failed to stream audio (CORS/Network error)");
+        });
     }
-    return;
+    return; // <-- Is line se code online song ke liye niche wale local loop me nahi jayega
   }
 
+  // 2. LOCAL TRACK FALLBACK (Jab song offline/local file ho)
   const chain = getFormatChainForSong(song);
   if (chainIndex >= chain.length) {
     updatePlaybackUI(false);
     showToast("Unable to load this track — file missing");
     return;
   }
+
   audioElement.src = buildUrl(song, chain[chainIndex]);
-  audioElement.playbackRate = playbackSpeed;
+  if (typeof playbackSpeed !== 'undefined') {
+    audioElement.playbackRate = playbackSpeed;
+  }
+  
   const playPromise = audioElement.play();
   if (playPromise !== undefined) {
-    playPromise.then(() => updatePlaybackUI(true)).catch(() => {
-      playAudioWithFallback(audioElement, song, chainIndex + 1);
-    });
+    playPromise
+      .then(() => updatePlaybackUI(true))
+      .catch(() => {
+        playAudioWithFallback(audioElement, song, chainIndex + 1);
+      });
   }
 }
 
