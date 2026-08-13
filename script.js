@@ -1,10 +1,20 @@
 /* ==========================================================================
    BOOSTER OS 2.0V MAX — Core Application Architecture
-   Designed by RAJ
+   Designed by RAJ (Bug-Fixed & Optimized Version)
    ========================================================================== */
 
 const API_BASE = 'https://jiosaavn-api.raj-pawar091206.workers.dev';
 const LYRICS_BASE = 'https://lrclib.net/api';
+
+/* ---------------- SAFE LOCAL STORAGE PARSER ---------------- */
+function getSafeLS(key, fallback) {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
 
 /* ---------------- STATE ENGINE ---------------- */
 const state = {
@@ -17,16 +27,16 @@ const state = {
   speed: parseFloat(localStorage.getItem('bo_speed') || '1.0'),
   visualizerMode: localStorage.getItem('bo_viz_mode') || 'spectrum',
   theme: localStorage.getItem('bo_theme') || 'dark',
-  favorites: JSON.parse(localStorage.getItem('bo_favorites') || '[]'),
-  recentlyPlayed: JSON.parse(localStorage.getItem('bo_recent') || '[]'),
-  playlists: JSON.parse(localStorage.getItem('bo_playlists') || '[]'),
+  favorites: getSafeLS('bo_favorites', []),
+  recentlyPlayed: getSafeLS('bo_recent', []),
+  playlists: getSafeLS('bo_playlists', []),
   localTracks: [],
-  lastPosition: JSON.parse(localStorage.getItem('bo_lastpos') || 'null'),
+  lastPosition: getSafeLS('bo_lastpos', null),
   quality: localStorage.getItem('bo_quality') || '320kbps',
-  crossfade: parseInt(localStorage.getItem('bo_crossfade') || '0'),
+  crossfade: parseInt(localStorage.getItem('bo_crossfade') || '0', 10),
   gapless: localStorage.getItem('bo_gapless') !== 'false',
   tvMode: false,
-  eqGains: JSON.parse(localStorage.getItem('bo_eq') || '[0,0,0,0,0,0,0,0,0,0]'),
+  eqGains: getSafeLS('bo_eq', [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
   activePreset: localStorage.getItem('bo_preset') || 'Normal',
   sleepTimerDeadline: null
 };
@@ -61,8 +71,9 @@ async function safeFetch(url, options = {}, retries = 2) {
 
 /* ---------------- UTILITIES ---------------- */
 function decodeEntities(str) {
+  if (!str) return '';
   const t = document.createElement('textarea');
-  t.innerHTML = str || '';
+  t.innerHTML = str;
   return t.value;
 }
 
@@ -75,6 +86,7 @@ function formatTime(sec) {
 
 function toast(msg) {
   const el = document.getElementById('toast');
+  if (!el) return;
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(el._t);
@@ -114,11 +126,12 @@ function saveLS() {
   localStorage.setItem('bo_viz_mode', state.visualizerMode);
 }
 
-function trackKey(t) { return t.id + '::' + (t.source || 'api'); }
+function trackKey(t) { return t ? (t.id + '::' + (t.source || 'api')) : ''; }
 function isFavorite(t) { return state.favorites.some(f => trackKey(f) === trackKey(t)); }
 
 /* ---------------- NORMALIZERS ---------------- */
 function normalizeSong(song) {
+  if (!song) return {};
   const imgArr = song.image || [];
   const img = (imgArr[2] || imgArr[imgArr.length - 1] || imgArr[0] || {}).url || '';
   const dl = song.downloadUrl || [];
@@ -191,7 +204,8 @@ async function apiGetPlaylist(id) {
 /* ---------------- LYRICS ENGINE ---------------- */
 async function fetchLyrics(track) {
   try {
-    const url = `${LYRICS_BASE}/search?track_name=${encodeURIComponent(track.title)}&artist_name=${encodeURIComponent(track.artist.split(',')[0])}`;
+    const mainArtist = (track.artist || '').split(',')[0].trim();
+    const url = `${LYRICS_BASE}/search?track_name=${encodeURIComponent(track.title)}&artist_name=${encodeURIComponent(mainArtist)}`;
     const list = await safeFetch(url, { headers: { 'Lrclib-Client': 'BoosterOS/2.0 MAX' } });
     const hit = Array.isArray(list) ? list.find(x => x.syncedLyrics) || list[0] : null;
     if (!hit) return null;
@@ -205,11 +219,13 @@ async function fetchLyrics(track) {
 
 function parseLRC(lrc) {
   const lines = [];
-  const re = /\[(\d{2}):(\d{2})(?:\.(\d{1,2}))?\]/g;
+  const re = /\[(\d{2}):(\d{2})(?:\.(\d{1,3}))?\]/g;
   lrc.split('\n').forEach(line => {
     let times = [];
     const text = line.replace(re, (full, mm, ss, cs) => {
-      times.push(parseInt(mm) * 60 + parseInt(ss) + (cs ? parseInt(cs) / (cs.length === 2 ? 100 : 1000) : 0));
+      let millis = 0;
+      if (cs) millis = cs.length === 2 ? parseInt(cs) / 100 : parseInt(cs) / 1000;
+      times.push(parseInt(mm) * 60 + parseInt(ss) + millis);
       return '';
     }).trim();
     times.forEach(t => lines.push({ time: t, text }));
@@ -228,7 +244,9 @@ let freqData, timeData, useSimulatedBeat = false, silentFrameCount = 0;
 
 function initAudioGraph() {
   if (audioCtx) return;
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+  audioCtx = new AudioContext();
   sourceNode = audioCtx.createMediaElementSource(audioEl);
 
   eqFilters = EQ_FREQS.map((f, i) => {
@@ -274,6 +292,10 @@ function initAudioGraph() {
 }
 
 function playTrack(track, addToQueueIfMissing = true) {
+  if (!track || !track.streamUrl) {
+    toast('Track stream URL unavailable');
+    return;
+  }
   initAudioGraph();
   if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
 
@@ -292,7 +314,7 @@ function playTrack(track, addToQueueIfMissing = true) {
     state.isPlaying = true;
     updatePlayButtons();
   }).catch(() => {
-    toast('Playback blocked by browser permissions');
+    toast('Playback blocked or failed');
   });
 
   addToRecent(track);
@@ -363,16 +385,33 @@ function cycleRepeat() {
   toast('Repeat Mode: ' + state.repeat.toUpperCase());
 }
 
+function updateElementText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
 function updatePlayButtons() {
   const icon = state.isPlaying ? '⏸' : '▶';
-  document.getElementById('miniPlayBtn').textContent = icon;
-  document.getElementById('npPlayBtn').textContent = icon;
-  document.getElementById('shuffleBtn').classList.toggle('on', state.shuffle);
-  document.getElementById('npShuffleBtn').classList.toggle('on', state.shuffle);
-  document.getElementById('repeatBtn').classList.toggle('on', state.repeat !== 'off');
-  document.getElementById('npRepeatBtn').classList.toggle('on', state.repeat !== 'off');
-  document.getElementById('repeatBtn').textContent = state.repeat === 'one' ? '🔂' : '🔁';
-  document.getElementById('npRepeatBtn').textContent = state.repeat === 'one' ? '🔂' : '🔁';
+  updateElementText('miniPlayBtn', icon);
+  updateElementText('npPlayBtn', icon);
+  
+  const shuffleBtn = document.getElementById('shuffleBtn');
+  const npShuffleBtn = document.getElementById('npShuffleBtn');
+  if (shuffleBtn) shuffleBtn.classList.toggle('on', state.shuffle);
+  if (npShuffleBtn) npShuffleBtn.classList.toggle('on', state.shuffle);
+
+  const repeatBtn = document.getElementById('repeatBtn');
+  const npRepeatBtn = document.getElementById('npRepeatBtn');
+  const repIcon = state.repeat === 'one' ? '🔂' : '🔁';
+  
+  if (repeatBtn) {
+    repeatBtn.classList.toggle('on', state.repeat !== 'off');
+    repeatBtn.textContent = repIcon;
+  }
+  if (npRepeatBtn) {
+    npRepeatBtn.classList.toggle('on', state.repeat !== 'off');
+    npRepeatBtn.textContent = repIcon;
+  }
 }
 
 function currentTrack() { return state.queue[state.currentIndex] || null; }
@@ -381,12 +420,20 @@ function currentTrack() { return state.queue[state.currentIndex] || null; }
 audioEl.addEventListener('timeupdate', () => {
   if (!audioEl.duration) return;
   const pct = (audioEl.currentTime / audioEl.duration) * 100;
-  document.getElementById('progressFill').style.width = pct + '%';
-  document.getElementById('npFill').style.width = pct + '%';
-  document.getElementById('timeCurrent').textContent = formatTime(audioEl.currentTime);
-  document.getElementById('timeTotal').textContent = formatTime(audioEl.duration);
-  document.getElementById('npTimeCurrent').textContent = formatTime(audioEl.currentTime);
-  document.getElementById('npTimeTotal').textContent = formatTime(audioEl.duration);
+  
+  ['progressFill', 'npFill'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.width = pct + '%';
+  });
+
+  const formattedCur = formatTime(audioEl.currentTime);
+  const formattedTot = formatTime(audioEl.duration);
+
+  updateElementText('timeCurrent', formattedCur);
+  updateElementText('timeTotal', formattedTot);
+  updateElementText('npTimeCurrent', formattedCur);
+  updateElementText('npTimeTotal', formattedTot);
+
   updateActiveLyric(audioEl.currentTime);
   checkSleepTimer();
   const t = currentTrack();
@@ -409,7 +456,8 @@ function resumePlay() {
     setTimeout(() => { audioEl.currentTime = state.lastPosition.time || 0; }, 400);
   } else {
     switchView('search');
-    document.getElementById('mainSearchInput').focus();
+    const input = document.getElementById('mainSearchInput');
+    if (input) input.focus();
   }
 }
 
@@ -427,6 +475,7 @@ function clearSleepTimer() {
 }
 function updateSleepTimerUI() {
   const status = document.getElementById('sleepTimerStatus');
+  if (!status) return;
   if (state.sleepTimerDeadline) {
     const leftSec = Math.max(0, Math.round((state.sleepTimerDeadline - Date.now()) / 1000));
     status.textContent = `Music will pause in ${formatTime(leftSec)}`;
@@ -444,37 +493,54 @@ function checkSleepTimer() {
 
 /* SEEK CONTROLS */
 ['miniBar', 'npBar'].forEach(id => {
-  document.getElementById(id).addEventListener('click', e => {
-    if (!audioEl.duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    audioEl.currentTime = ((e.clientX - rect.left) / rect.width) * audioEl.duration;
-  });
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('click', e => {
+      if (!audioEl.duration) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      audioEl.currentTime = ((e.clientX - rect.left) / rect.width) * audioEl.duration;
+    });
+  }
 });
 
-document.getElementById('volumeSlider').addEventListener('input', e => {
-  state.volume = parseFloat(e.target.value);
-  if (gainNode) gainNode.gain.value = state.volume;
-  saveLS();
-});
-document.getElementById('volumeSlider').value = state.volume;
+const volSlider = document.getElementById('volumeSlider');
+if (volSlider) {
+  volSlider.value = state.volume;
+  volSlider.addEventListener('input', e => {
+    state.volume = parseFloat(e.target.value);
+    if (gainNode) gainNode.gain.value = state.volume;
+    saveLS();
+  });
+}
 
 /* ================= NOW PLAYING OVERLAY UI ================= */
 function updateNowPlayingUI(track) {
-  document.getElementById('miniTitle').textContent = track.title;
-  document.getElementById('miniArtist').textContent = track.artist;
-  document.getElementById('miniArt').src = track.image || placeholderArt();
-  document.getElementById('npTitle').textContent = track.title;
-  document.getElementById('npArtist').textContent = track.artist;
-  document.getElementById('npArt').src = track.image || placeholderArt();
+  if (!track) return;
+  updateElementText('miniTitle', track.title);
+  updateElementText('miniArtist', track.artist);
+  updateElementText('npTitle', track.title);
+  updateElementText('npArtist', track.artist);
+
+  const miniArt = document.getElementById('miniArt');
+  const npArt = document.getElementById('npArt');
+  if (miniArt) miniArt.src = track.image || placeholderArt();
+  if (npArt) npArt.src = track.image || placeholderArt();
 
   const favActive = isFavorite(track);
-  document.getElementById('favMiniBtn').textContent = favActive ? '♥' : '♡';
-  document.getElementById('favMiniBtn').classList.toggle('active', favActive);
-  document.getElementById('npFavBtn').textContent = (favActive ? '♥ Favorited' : '♡ Favorite');
-  document.getElementById('npFavBtn').classList.toggle('on', favActive);
+  const favMiniBtn = document.getElementById('favMiniBtn');
+  const npFavBtn = document.getElementById('npFavBtn');
 
-  document.getElementById('spotlightTitle').textContent = 'Now Playing: ' + track.title;
-  document.getElementById('spotlightSub').textContent = track.artist + ' • Dynamic HD Engine Active';
+  if (favMiniBtn) {
+    favMiniBtn.textContent = favActive ? '♥' : '♡';
+    favMiniBtn.classList.toggle('active', favActive);
+  }
+  if (npFavBtn) {
+    npFavBtn.textContent = (favActive ? '♥ Favorited' : '♡ Favorite');
+    npFavBtn.classList.toggle('on', favActive);
+  }
+
+  updateElementText('spotlightTitle', 'Now Playing: ' + track.title);
+  updateElementText('spotlightSub', track.artist + ' • Dynamic HD Engine Active');
   highlightPlayingCards(track);
 }
 
@@ -495,16 +561,24 @@ function toggleFavoriteCurrent() {
   else state.favorites.push(t);
   saveLS();
   updateNowPlayingUI(t);
-  if (document.getElementById('view-library').classList.contains('active')) renderLibrary();
+  const libView = document.getElementById('view-library');
+  if (libView && libView.classList.contains('active')) renderLibrary();
 }
 
-function openNowPlaying() { document.getElementById('npOverlay').classList.add('open'); }
-function closeNowPlaying() { document.getElementById('npOverlay').classList.remove('open'); }
+function openNowPlaying() {
+  const el = document.getElementById('npOverlay');
+  if (el) el.classList.add('open');
+}
+function closeNowPlaying() {
+  const el = document.getElementById('npOverlay');
+  if (el) el.classList.remove('open');
+}
 
 /* ================= LYRICS ENGINE ================= */
 let currentLyrics = null, activeLyricIndex = -1;
 async function fetchAndRenderLyrics(track) {
   const box = document.getElementById('lyricsContainer');
+  if (!box) return;
   box.innerHTML = '<div class="empty-state">Loading synced lyrics...</div>';
   currentLyrics = null; activeLyricIndex = -1;
 
@@ -580,7 +654,11 @@ async function extractAndApplyColors(track) {
   if (!rgb) rgb = hashColor(track.title + track.artist);
   targetColorRGB = rgb;
   animateColorTransition();
-  document.getElementById('npBg').style.background = `radial-gradient(circle at 30% 20%, rgb(${rgb[0]},${rgb[1]},${rgb[2]}) 0%, transparent 60%)`;
+  
+  const npBg = document.getElementById('npBg');
+  if (npBg) {
+    npBg.style.background = `radial-gradient(circle at 30% 20%, rgb(${rgb[0]},${rgb[1]},${rgb[2]}) 0%, transparent 60%)`;
+  }
 }
 
 function animateColorTransition() {
@@ -605,16 +683,20 @@ function animateColorTransition() {
 
 /* ================= VISUALIZER ENGINE ================= */
 const ambientCanvas = document.getElementById('ambientCanvas');
-const ambCtx = ambientCanvas.getContext('2d');
+const ambCtx = ambientCanvas ? ambientCanvas.getContext('2d') : null;
 const vizCanvas = document.getElementById('vizCanvas');
-const vizCtx = vizCanvas.getContext('2d');
+const vizCtx = vizCanvas ? vizCanvas.getContext('2d') : null;
 let particles = [];
 
 function resizeCanvases() {
-  ambientCanvas.width = window.innerWidth;
-  ambientCanvas.height = window.innerHeight;
-  vizCanvas.width = vizCanvas.clientWidth * 2 || 800;
-  vizCanvas.height = vizCanvas.clientHeight * 2 || 400;
+  if (ambientCanvas) {
+    ambientCanvas.width = window.innerWidth;
+    ambientCanvas.height = window.innerHeight;
+  }
+  if (vizCanvas) {
+    vizCanvas.width = vizCanvas.clientWidth * 2 || 800;
+    vizCanvas.height = vizCanvas.clientHeight * 2 || 400;
+  }
 }
 window.addEventListener('resize', resizeCanvases);
 resizeCanvases();
@@ -660,6 +742,7 @@ function analyzeAudio() {
 }
 
 function drawAmbient() {
+  if (!ambCtx || !ambientCanvas) return;
   ambCtx.clearRect(0, 0, ambientCanvas.width, ambientCanvas.height);
   const [r, g, b] = currentColorRGB;
   const intensity = 0.08 + beatPulse * 0.18;
@@ -685,6 +768,7 @@ function drawAmbient() {
 }
 
 function drawViz() {
+  if (!vizCtx || !vizCanvas) return;
   const w = vizCanvas.width, h = vizCanvas.height;
   vizCtx.clearRect(0, 0, w, h);
   const [r, g, b] = currentColorRGB;
@@ -753,22 +837,26 @@ function drawViz() {
 function rafLoop() {
   analyzeAudio();
   drawAmbient();
-  if (document.getElementById('npOverlay').classList.contains('open')) drawViz();
+  const overlay = document.getElementById('npOverlay');
+  if (overlay && overlay.classList.contains('open')) drawViz();
   requestAnimationFrame(rafLoop);
 }
 rafLoop();
 
-document.getElementById('vizModeRow').innerHTML = ['spectrum', 'waveform', 'circular', 'particles', 'ambient'].map(m =>
-  `<button class="np-mode-btn ${m === state.visualizerMode ? 'active' : ''}" data-mode="${m}">${m[0].toUpperCase() + m.slice(1)}</button>`
-).join('');
+const vizRow = document.getElementById('vizModeRow');
+if (vizRow) {
+  vizRow.innerHTML = ['spectrum', 'waveform', 'circular', 'particles', 'ambient'].map(m =>
+    `<button class="np-mode-btn ${m === state.visualizerMode ? 'active' : ''}" data-mode="${m}">${m[0].toUpperCase() + m.slice(1)}</button>`
+  ).join('');
 
-document.getElementById('vizModeRow').addEventListener('click', e => {
-  const btn = e.target.closest('.np-mode-btn');
-  if (!btn) return;
-  state.visualizerMode = btn.dataset.mode;
-  document.querySelectorAll('.np-mode-btn').forEach(b => b.classList.toggle('active', b === btn));
-  saveLS();
-});
+  vizRow.addEventListener('click', e => {
+    const btn = e.target.closest('.np-mode-btn');
+    if (!btn) return;
+    state.visualizerMode = btn.dataset.mode;
+    document.querySelectorAll('.np-mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+    saveLS();
+  });
+}
 
 /* ================= MEDIA SESSION API ================= */
 function setMediaSessionMeta(track) {
@@ -793,9 +881,12 @@ function setMediaSessionMeta(track) {
 /* ================= NAVIGATION ================= */
 function switchView(id) {
   document.querySelectorAll('.view-panel').forEach(v => v.classList.remove('active'));
-  document.getElementById('view-' + id).classList.add('active');
+  const targetView = document.getElementById('view-' + id);
+  if (targetView) targetView.classList.add('active');
+  
   document.querySelectorAll('.sidebar .nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === id));
   document.querySelectorAll('.mobile-nav button').forEach(n => n.classList.toggle('active', n.dataset.view === id));
+  
   if (id === 'library') renderLibrary();
   if (id === 'playlists') renderPlaylists();
   if (id === 'queue') renderQueueViews();
@@ -818,12 +909,15 @@ document.querySelectorAll('.theme-btn').forEach(b => {
 document.body.dataset.theme = state.theme;
 
 /* TV Mode */
-document.getElementById('tvModeBtn').addEventListener('click', () => {
-  state.tvMode = !state.tvMode;
-  document.body.classList.toggle('tv-mode', state.tvMode);
-  if (state.tvMode && currentTrack()) openNowPlaying();
-  toast(state.tvMode ? 'TV Mode Enabled' : 'TV Mode Disabled');
-});
+const tvBtn = document.getElementById('tvModeBtn');
+if (tvBtn) {
+  tvBtn.addEventListener('click', () => {
+    state.tvMode = !state.tvMode;
+    document.body.classList.toggle('tv-mode', state.tvMode);
+    if (state.tvMode && currentTrack()) openNowPlaying();
+    toast(state.tvMode ? 'TV Mode Enabled' : 'TV Mode Disabled');
+  });
+}
 
 /* ================= CARD RENDERING ================= */
 function trackCardHTML(t) {
@@ -846,6 +940,7 @@ function trackCardHTML(t) {
 }
 
 function bindCardEvents(container, tracks) {
+  if (!container) return;
   container.querySelectorAll('[data-playkey]').forEach(btn => {
     const t = tracks.find(x => trackKey(x) === btn.dataset.playkey);
     btn.addEventListener('click', e => { e.stopPropagation(); if (t) playTrack(t); });
@@ -886,6 +981,7 @@ function bindCardEvents(container, tracks) {
 /* ================= HOME VIEW ================= */
 async function loadHome() {
   const grid = document.getElementById('homeGrid');
+  if (!grid) return;
   grid.innerHTML = Array(8).fill('<div class="skeleton"></div>').join('');
   try {
     const songs = await apiSearchSongs('Bollywood Latest');
@@ -899,6 +995,7 @@ async function loadHome() {
 
 function renderRecentHome() {
   const grid = document.getElementById('recentGrid');
+  if (!grid) return;
   if (!state.recentlyPlayed.length) {
     grid.innerHTML = '<div class="empty-state">No recently played tracks yet</div>';
     return;
@@ -908,37 +1005,47 @@ function renderRecentHome() {
   bindCardEvents(grid, tracks);
 }
 
-document.getElementById('moodTags').addEventListener('click', async e => {
-  const tag = e.target.closest('.tag'); if (!tag) return;
-  document.querySelectorAll('#moodTags .tag').forEach(t => t.classList.toggle('active', t === tag));
-  if (tag.dataset.fav) { switchView('library'); renderLibrary('favorites'); return; }
-  const grid = document.getElementById('homeGrid');
-  grid.innerHTML = Array(8).fill('<div class="skeleton"></div>').join('');
-  const songs = await apiSearchSongs(tag.dataset.q);
-  grid.innerHTML = songs.map(trackCardHTML).join('');
-  bindCardEvents(grid, songs);
-});
+const moodTags = document.getElementById('moodTags');
+if (moodTags) {
+  moodTags.addEventListener('click', async e => {
+    const tag = e.target.closest('.tag'); if (!tag) return;
+    document.querySelectorAll('#moodTags .tag').forEach(t => t.classList.toggle('active', t === tag));
+    if (tag.dataset.fav) { switchView('library'); renderLibrary('favorites'); return; }
+    const grid = document.getElementById('homeGrid');
+    if (!grid) return;
+    grid.innerHTML = Array(8).fill('<div class="skeleton"></div>').join('');
+    const songs = await apiSearchSongs(tag.dataset.q);
+    grid.innerHTML = songs.map(trackCardHTML).join('');
+    bindCardEvents(grid, songs);
+  });
+}
 
 /* ================= SEARCH VIEW ================= */
 let searchType = 'songs';
-document.getElementById('searchTypeTags').addEventListener('click', e => {
-  const tag = e.target.closest('.tag'); if (!tag) return;
-  document.querySelectorAll('#searchTypeTags .tag').forEach(t => t.classList.toggle('active', t === tag));
-  searchType = tag.dataset.type;
-  const q = document.getElementById('mainSearchInput').value.trim();
-  if (q) runSearch(q);
-});
+const searchTypeTags = document.getElementById('searchTypeTags');
+if (searchTypeTags) {
+  searchTypeTags.addEventListener('click', e => {
+    const tag = e.target.closest('.tag'); if (!tag) return;
+    document.querySelectorAll('#searchTypeTags .tag').forEach(t => t.classList.toggle('active', t === tag));
+    searchType = tag.dataset.type;
+    const input = document.getElementById('mainSearchInput');
+    const q = input ? input.value.trim() : '';
+    if (q) runSearch(q);
+  });
+}
 
 function goSearch(q) {
   q = q.trim(); if (!q) return;
   switchView('search');
-  document.getElementById('mainSearchInput').value = q;
+  const input = document.getElementById('mainSearchInput');
+  if (input) input.value = q;
   runSearch(q);
 }
 
 async function runSearch(q) {
   const grid = document.getElementById('searchGrid');
-  document.getElementById('searchResultTitle').textContent = `Results for "${q}"`;
+  if (!grid) return;
+  updateElementText('searchResultTitle', `Results for "${q}"`);
   grid.innerHTML = Array(8).fill('<div class="skeleton"></div>').join('');
   try {
     if (searchType === 'songs') {
@@ -990,16 +1097,18 @@ function playlistCardHTML(p) {
   </div>`;
 }
 
-function bindAlbumEvents(grid) { grid.querySelectorAll('[data-albumid]').forEach(c => c.addEventListener('click', () => openAlbum(c.dataset.albumid))); }
-function bindArtistEvents(grid) { grid.querySelectorAll('[data-artistid]').forEach(c => c.addEventListener('click', () => openArtist(c.dataset.artistid))); }
-function bindApiPlaylistEvents(grid) { grid.querySelectorAll('[data-playlistid]').forEach(c => c.addEventListener('click', () => openApiPlaylist(c.dataset.playlistid))); }
+function bindAlbumEvents(grid) { if (grid) grid.querySelectorAll('[data-albumid]').forEach(c => c.addEventListener('click', () => openAlbum(c.dataset.albumid))); }
+function bindArtistEvents(grid) { if (grid) grid.querySelectorAll('[data-artistid]').forEach(c => c.addEventListener('click', () => openArtist(c.dataset.artistid))); }
+function bindApiPlaylistEvents(grid) { if (grid) grid.querySelectorAll('[data-playlistid]').forEach(c => c.addEventListener('click', () => openApiPlaylist(c.dataset.playlistid))); }
 
 /* ================= DETAIL VIEWS ================= */
 async function openAlbum(id) {
   switchView('detail');
   const header = document.getElementById('detailHeader'); const grid = document.getElementById('detailGrid');
+  if (!header || !grid) return;
   header.innerHTML = '<div class="skeleton" style="height:180px;"></div>'; grid.innerHTML = '';
   const album = await apiGetAlbum(id);
+  if (!album) return;
   const img = (album.image?.[2] || album.image?.[0] || {}).url || '';
   header.innerHTML = `<div class="album-header">
     <img src="${img}" alt="Album Artwork">
@@ -1013,14 +1122,17 @@ async function openAlbum(id) {
   const tracks = (album.songs || []).map(normalizeSong);
   grid.innerHTML = tracks.map(trackCardHTML).join('');
   bindCardEvents(grid, tracks);
-  document.getElementById('playAlbumBtn').addEventListener('click', () => { state.queue = tracks.slice(); playTrack(tracks[0]); });
+  const btn = document.getElementById('playAlbumBtn');
+  if (btn) btn.addEventListener('click', () => { state.queue = tracks.slice(); if (tracks[0]) playTrack(tracks[0]); });
 }
 
 async function openArtist(id) {
   switchView('detail');
   const header = document.getElementById('detailHeader'); const grid = document.getElementById('detailGrid');
+  if (!header || !grid) return;
   header.innerHTML = '<div class="skeleton" style="height:180px;"></div>'; grid.innerHTML = '';
   const artist = await apiGetArtist(id);
+  if (!artist) return;
   const img = (artist.image?.[2] || artist.image?.[0] || {}).url || '';
   header.innerHTML = `<div class="artist-header">
     <img src="${img}" style="border-radius:50%;" alt="Artist Artwork">
@@ -1038,8 +1150,10 @@ async function openArtist(id) {
 async function openApiPlaylist(id) {
   switchView('detail');
   const header = document.getElementById('detailHeader'); const grid = document.getElementById('detailGrid');
+  if (!header || !grid) return;
   header.innerHTML = '<div class="skeleton" style="height:180px;"></div>'; grid.innerHTML = '';
   const pl = await apiGetPlaylist(id);
+  if (!pl) return;
   const img = (pl.image?.[2] || pl.image?.[0] || {}).url || '';
   header.innerHTML = `<div class="album-header">
     <img src="${img}" alt="Playlist Artwork">
@@ -1053,21 +1167,26 @@ async function openApiPlaylist(id) {
   const tracks = (pl.songs || []).map(normalizeSong);
   grid.innerHTML = tracks.map(trackCardHTML).join('');
   bindCardEvents(grid, tracks);
-  document.getElementById('playPlBtn').addEventListener('click', () => { state.queue = tracks.slice(); playTrack(tracks[0]); });
+  const btn = document.getElementById('playPlBtn');
+  if (btn) btn.addEventListener('click', () => { state.queue = tracks.slice(); if (tracks[0]) playTrack(tracks[0]); });
 }
 
 /* ================= LIBRARY VIEW ================= */
 let activeLibTab = 'favorites';
-document.getElementById('libTabs').addEventListener('click', e => {
-  const tag = e.target.closest('.tag'); if (!tag) return;
-  document.querySelectorAll('#libTabs .tag').forEach(t => t.classList.toggle('active', t === tag));
-  renderLibrary(tag.dataset.lib);
-});
+const libTabs = document.getElementById('libTabs');
+if (libTabs) {
+  libTabs.addEventListener('click', e => {
+    const tag = e.target.closest('.tag'); if (!tag) return;
+    document.querySelectorAll('#libTabs .tag').forEach(t => t.classList.toggle('active', t === tag));
+    renderLibrary(tag.dataset.lib);
+  });
+}
 
 function renderLibrary(tab) {
   activeLibTab = tab || activeLibTab;
   document.querySelectorAll('#libTabs .tag').forEach(t => t.classList.toggle('active', t.dataset.lib === activeLibTab));
   const grid = document.getElementById('libraryGrid');
+  if (!grid) return;
   let tracks = [];
 
   if (activeLibTab === 'favorites') tracks = state.favorites;
@@ -1080,7 +1199,8 @@ function renderLibrary(tab) {
   else if (activeLibTab === 'local') tracks = state.localTracks;
   else if (activeLibTab === 'downloads') tracks = [];
 
-  document.getElementById('localDrop').style.display = activeLibTab === 'local' ? 'block' : 'none';
+  const localDrop = document.getElementById('localDrop');
+  if (localDrop) localDrop.style.display = activeLibTab === 'local' ? 'block' : 'none';
 
   if (!tracks.length) {
     grid.innerHTML = activeLibTab === 'downloads'
@@ -1092,25 +1212,31 @@ function renderLibrary(tab) {
   bindCardEvents(grid, tracks);
 }
 
-document.getElementById('localFileInput').addEventListener('change', e => {
-  const files = Array.from(e.target.files || []);
-  files.forEach(f => state.localTracks.push(normalizeLocalFile(f)));
-  toast(`${files.length} local track(s) imported`);
-  if (activeLibTab === 'local') renderLibrary('local');
-});
+const localFileInput = document.getElementById('localFileInput');
+if (localFileInput) {
+  localFileInput.addEventListener('change', e => {
+    const files = Array.from(e.target.files || []);
+    files.forEach(f => state.localTracks.push(normalizeLocalFile(f)));
+    toast(`${files.length} local track(s) imported`);
+    if (activeLibTab === 'local') renderLibrary('local');
+  });
+}
 
 const dz = document.getElementById('localDrop');
-['dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.borderColor = 'var(--accent)'; }));
-['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.borderColor = 'var(--border)'; }));
-dz.addEventListener('drop', e => {
-  const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('audio'));
-  files.forEach(f => state.localTracks.push(normalizeLocalFile(f)));
-  if (files.length) { toast(`${files.length} file(s) added`); renderLibrary('local'); }
-});
+if (dz) {
+  ['dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.borderColor = 'var(--accent)'; }));
+  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.style.borderColor = 'var(--border)'; }));
+  dz.addEventListener('drop', e => {
+    const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('audio'));
+    files.forEach(f => state.localTracks.push(normalizeLocalFile(f)));
+    if (files.length) { toast(`${files.length} file(s) added`); renderLibrary('local'); }
+  });
+}
 
 /* ================= PLAYLISTS MANAGEMENT ================= */
 function renderPlaylists() {
   const grid = document.getElementById('playlistsGrid');
+  if (!grid) return;
   if (!state.playlists.length) {
     grid.innerHTML = '<div class="empty-state">No playlists created yet. Click "+ New Playlist" to start.</div>';
     return;
@@ -1129,7 +1255,7 @@ function renderPlaylists() {
   grid.querySelectorAll('[data-plid]').forEach(card => {
     card.addEventListener('click', () => {
       const pl = state.playlists.find(p => p.id === card.dataset.plid);
-      openLocalPlaylist(pl);
+      if (pl) openLocalPlaylist(pl);
     });
   });
 }
@@ -1137,6 +1263,7 @@ function renderPlaylists() {
 function openLocalPlaylist(pl) {
   switchView('detail');
   const header = document.getElementById('detailHeader'); const grid = document.getElementById('detailGrid');
+  if (!header || !grid) return;
   header.innerHTML = `<div class="album-header">
     <img src="${(pl.tracks[0] && pl.tracks[0].image) || placeholderArt()}" alt="Playlist Cover">
     <div>
@@ -1148,12 +1275,15 @@ function openLocalPlaylist(pl) {
   </div>`;
   grid.innerHTML = pl.tracks.length ? pl.tracks.map(trackCardHTML).join('') : '<div class="empty-state">Playlist is empty</div>';
   bindCardEvents(grid, pl.tracks);
-  document.getElementById('playLocalPlBtn').addEventListener('click', () => {
-    if (pl.tracks.length) {
-      state.queue = pl.tracks.slice();
-      playTrack(pl.tracks[0]);
-    }
-  });
+  const btn = document.getElementById('playLocalPlBtn');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      if (pl.tracks.length) {
+        state.queue = pl.tracks.slice();
+        playTrack(pl.tracks[0]);
+      }
+    });
+  }
 }
 
 function exportPlaylists() {
@@ -1167,12 +1297,18 @@ function exportPlaylists() {
   toast("Playlists exported successfully!");
 }
 
-function openModal(id) { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-function openCreatePlaylist() { closeModal('addToPlaylistModal'); document.getElementById('playlistNameInput').value = ''; openModal('playlistModal'); }
+function openModal(id) { const el = document.getElementById(id); if (el) el.classList.add('open'); }
+function closeModal(id) { const el = document.getElementById(id); if (el) el.classList.remove('open'); }
+function openCreatePlaylist() {
+  closeModal('addToPlaylistModal');
+  const input = document.getElementById('playlistNameInput');
+  if (input) input.value = '';
+  openModal('playlistModal');
+}
 
 function confirmCreatePlaylist() {
-  const name = document.getElementById('playlistNameInput').value.trim();
+  const input = document.getElementById('playlistNameInput');
+  const name = input ? input.value.trim() : '';
   if (!name) return toast('Please enter a playlist name');
   const pl = { id: 'pl-' + Date.now(), name, tracks: [] };
   state.playlists.push(pl);
@@ -1185,6 +1321,7 @@ function confirmCreatePlaylist() {
 function addCurrentToPlaylistPrompt() {
   const t = currentTrack(); if (!t) return toast('No track playing');
   const list = document.getElementById('playlistPickerList');
+  if (!list) return;
   if (!state.playlists.length) {
     list.innerHTML = '<div class="empty-state">No playlists found</div>';
   } else {
@@ -1208,13 +1345,17 @@ function addCurrentToPlaylistPrompt() {
 function renderQueueViews() {
   const nowGrid = document.getElementById('queueNowGrid');
   const t = currentTrack();
-  nowGrid.innerHTML = t ? trackCardHTML(t) : '<div class="empty-state">Nothing playing right now</div>';
-  if (t) bindCardEvents(nowGrid, [t]);
+  if (nowGrid) {
+    nowGrid.innerHTML = t ? trackCardHTML(t) : '<div class="empty-state">Nothing playing right now</div>';
+    if (t) bindCardEvents(nowGrid, [t]);
+  }
 
   const upNext = state.queue.slice(state.currentIndex + 1);
   const grid = document.getElementById('queueGrid');
-  grid.innerHTML = upNext.length ? upNext.map(trackCardHTML).join('') : '<div class="empty-state">Queue is empty</div>';
-  bindCardEvents(grid, upNext);
+  if (grid) {
+    grid.innerHTML = upNext.length ? upNext.map(trackCardHTML).join('') : '<div class="empty-state">Queue is empty</div>';
+    bindCardEvents(grid, upNext);
+  }
 }
 
 function clearQueue() {
@@ -1233,6 +1374,7 @@ function renderDSPControls() {
 
 function renderEQBands() {
   const box = document.getElementById('eqBands');
+  if (!box) return;
   box.innerHTML = EQ_FREQS.map((f, i) => `
     <div class="eq-band">
       <input type="range" min="-12" max="12" value="${state.eqGains[i]}" data-band="${i}">
@@ -1242,7 +1384,7 @@ function renderEQBands() {
 
   box.querySelectorAll('input[type=range]').forEach(inp => {
     inp.addEventListener('input', () => {
-      const i = parseInt(inp.dataset.band);
+      const i = parseInt(inp.dataset.band, 10);
       state.eqGains[i] = parseFloat(inp.value);
       if (eqFilters[i]) eqFilters[i].gain.value = state.eqGains[i];
       state.activePreset = 'Custom';
@@ -1254,6 +1396,7 @@ function renderEQBands() {
 
 function renderPresets() {
   const box = document.getElementById('presetRow');
+  if (!box) return;
   box.innerHTML = Object.keys(PRESETS).map(p =>
     `<button class="preset-btn ${p === state.activePreset ? 'active' : ''}" data-p="${p}">${p}</button>`
   ).join('');
@@ -1276,37 +1419,52 @@ function highlightPreset() {
 }
 
 /* Tone Controls */
-document.getElementById('bassSlider').addEventListener('input', e => {
-  const v = parseFloat(e.target.value);
-  document.getElementById('bassVal').textContent = `${v} dB`;
-  if (bassFilter) bassFilter.gain.value = v;
-});
+const bassSlider = document.getElementById('bassSlider');
+if (bassSlider) {
+  bassSlider.addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    updateElementText('bassVal', `${v} dB`);
+    if (bassFilter) bassFilter.gain.value = v;
+  });
+}
 
-document.getElementById('trebleSlider').addEventListener('input', e => {
-  const v = parseFloat(e.target.value);
-  document.getElementById('trebleVal').textContent = `${v} dB`;
-  if (trebleFilter) trebleFilter.gain.value = v;
-});
+const trebleSlider = document.getElementById('trebleSlider');
+if (trebleSlider) {
+  trebleSlider.addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    updateElementText('trebleVal', `${v} dB`);
+    if (trebleFilter) trebleFilter.gain.value = v;
+  });
+}
 
-document.getElementById('speedSlider').addEventListener('input', e => {
-  state.speed = parseFloat(e.target.value);
-  document.getElementById('speedVal').textContent = `${state.speed.toFixed(2)}x`;
-  audioEl.playbackRate = state.speed;
-  saveLS();
-});
+const speedSlider = document.getElementById('speedSlider');
+if (speedSlider) {
+  speedSlider.addEventListener('input', e => {
+    state.speed = parseFloat(e.target.value);
+    updateElementText('speedVal', `${state.speed.toFixed(2)}x`);
+    audioEl.playbackRate = state.speed;
+    saveLS();
+  });
+}
 
-document.getElementById('qualitySelect').value = state.quality;
-document.getElementById('qualitySelect').addEventListener('change', e => {
-  state.quality = e.target.value;
-  saveLS();
-  toast(`Audio quality set to ${state.quality}`);
-});
+const qualitySelect = document.getElementById('qualitySelect');
+if (qualitySelect) {
+  qualitySelect.value = state.quality;
+  qualitySelect.addEventListener('change', e => {
+    state.quality = e.target.value;
+    saveLS();
+    toast(`Audio quality set to ${state.quality}`);
+  });
+}
 
-document.getElementById('crossfadeSlider').addEventListener('input', e => {
-  state.crossfade = parseInt(e.target.value);
-  document.getElementById('crossfadeVal').textContent = `${state.crossfade}s`;
-  saveLS();
-});
+const crossfadeSlider = document.getElementById('crossfadeSlider');
+if (crossfadeSlider) {
+  crossfadeSlider.addEventListener('input', e => {
+    state.crossfade = parseInt(e.target.value, 10);
+    updateElementText('crossfadeVal', `${state.crossfade}s`);
+    saveLS();
+  });
+}
 
 /* Keyboard Shortcuts */
 window.addEventListener('keydown', e => {
