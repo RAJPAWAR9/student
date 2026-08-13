@@ -592,7 +592,9 @@ function playAudioWithFallback(audioElement, song, chainIndex = 0) {
     }
 
     audioElement.pause();
-    audioElement.src = song.streamUrl;
+    // Direct URL agar HTTPS na ho toh HTTPS karein + CORS bypass
+let directUrl = song.streamUrl.replace(/^http:\/\//, 'https://');
+audioElement.src = `https://corsproxy.io/?${encodeURIComponent(directUrl)}`;
     
     if (typeof playbackSpeed !== 'undefined') {
       audioElement.playbackRate = playbackSpeed;
