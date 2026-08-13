@@ -1425,7 +1425,6 @@ let playPrev;
 
 document.addEventListener('DOMContentLoaded', () => {
   loadSettingsIntoState();
-  initPasswordLock();
   displayedList = getActiveList();
   applySettingsToUI();
   renderTrendingGrid();
