@@ -1,15 +1,21 @@
 {
   "name": "BOOSTER OS 2.0V MAX",
   "short_name": "BOOSTER OS",
-  "description": "Your Music. Your Power. Your Sound. — Designed by RAJ",
   "start_url": "./index.html",
-  "scope": "./",
   "display": "standalone",
   "background_color": "#060913",
-  "theme_color": "#00f2fe",
-  "orientation": "any",
+  "theme_color": "#060913",
+  "description": "Cross-Platform High-Performance Music OS designed by RAJ",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='192' height='192' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23060913'/><text x='50%' y='65%' font-size='60' text-anchor='middle' fill='%2300f2fe'>⚡</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23060913'/><text x='50%' y='65%' font-size='60' text-anchor='middle' fill='%2300f2fe'>⚡</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
   ]
 }
